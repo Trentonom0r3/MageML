@@ -9,8 +9,13 @@
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
       "cacheVariables": {
-        "CMAKE_C_COMPILER": "cl.exe",
-        "CMAKE_CXX_COMPILER": "cl.exe"
+        "CMAKE_TOOLCHAIN_FILE": "D:/dev/c++/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_ROOT": "D:/dev/c++/vcpkg",
+        "Torch_DIR": "D:/dev/C++/Libraries/libtorch-cpu/libtorch/share/cmake/Torch",
+        "Python3_ROOT_DIR": "C:/Program Files/Python313",
+        "Python3_EXECUTABLE": "C:/Program Files/Python313/python.exe",
+        "PYTORCH_PYTHON_LIB_DIR": "C:/Program Files/Python313/Lib/site-packages/torch/lib"
       },
       "condition": {
         "type": "equals",
@@ -53,61 +58,6 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_CUDA": "ON"
-      }
-    },
-    {
-      "name": "x64-release-cuda",
-      "displayName": "x64 Release CUDA",
-      "description": "Target Windows (64-bit) with CUDA support. (Release)",
-      "inherits": "x64-debug-cuda",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      }
-    },
-    {
-      "name": "x86-debug-cpu",
-      "displayName": "x86 Debug CPU-only",
-      "description": "Target Windows (32-bit) CPU-only build. (Debug)",
-      "inherits": "windows-base",
-      "architecture": {
-        "value": "x86",
-        "strategy": "external"
-      },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "ENABLE_CUDA": "OFF"
-      }
-    },
-    {
-      "name": "x86-release-cpu",
-      "displayName": "x86 Release CPU-only",
-      "description": "Target Windows (32-bit) CPU-only build. (Release)",
-      "inherits": "x86-debug-cpu",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      }
-    },
-    {
-      "name": "x86-debug-cuda",
-      "displayName": "x86 Debug CUDA",
-      "description": "Target Windows (32-bit) with CUDA support. (Debug)",
-      "inherits": "windows-base",
-      "architecture": {
-        "value": "x86",
-        "strategy": "external"
-      },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "ENABLE_CUDA": "ON"
-      }
-    },
-    {
-      "name": "x86-release-cuda",
-      "displayName": "x86 Release CUDA",
-      "description": "Target Windows (32-bit) with CUDA support. (Release)",
-      "inherits": "x86-debug-cuda",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
       }
     }
   ]

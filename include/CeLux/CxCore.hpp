@@ -11,8 +11,8 @@
 #include <stdexcept> // For std::runtime_error
 #include <string>
 #include <thread>
-#include <Logger.hpp>
-#include <torch/extension.h>
+#include <Celux/Logger.hpp>
+#include <torch/torch.h>
 #include <vector>
 #include <optional>
 #include <type_traits>

@@ -1,7 +1,6 @@
 // Python/VideoReader.cpp
 
 #include "Python/VideoReader.hpp"
-#include <pybind11/pybind11.h>
 #include <torch/torch.h> // Ensure you have included the necessary Torch headers
 #include <TensorBuilder.hpp>
 

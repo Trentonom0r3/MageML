@@ -1,5 +1,6 @@
 import time
 import cv2
+<<<<<<< Updated upstream
 import av
 import torch
 import sys
@@ -9,6 +10,13 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 from celux import VideoReader
 
 VIDEO_PATH = r"C:\Users\tjerf\Downloads\TAS_fpqg.mp4"
+=======
+import sys
+import os
+import celux
+
+VIDEO_PATH = r"D:\dev\Projects\Repos\CeLux\tests\data\output_nv12.mp4"
+>>>>>>> Stashed changes
 
 def benchmark_opencv():
     cap = cv2.VideoCapture(VIDEO_PATH)
@@ -32,7 +40,8 @@ def benchmark_pyav():
     return frame_count / (time.time() - start)
 
 def benchmark_celux():
-    reader = VideoReader(VIDEO_PATH)
+    filters = celux.Curves(red="1.0")
+    reader = celux.VideoReader(VIDEO_PATH)
     start = time.time()
     frame_count = 0
     for _ in reader:

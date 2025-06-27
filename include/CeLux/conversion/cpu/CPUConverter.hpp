@@ -1,7 +1,7 @@
 // ConverterBase.hpp (CPU)
 #pragma once
-#include "Frame.hpp"
-#include "IConverter.hpp"
+#include "Celux/Frame.hpp"
+#include "Celux/conversion/IConverter.hpp"
 
 namespace celux
 {

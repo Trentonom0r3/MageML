@@ -9,7 +9,7 @@ namespace py = pybind11;
 
 PYBIND11_MODULE(celux, m)
 {
-
+    py::module_::import("torch");
     // Register the filters into the 'filters' submodule
     register_filters(m);
     // VideoReader bindings

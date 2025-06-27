@@ -1,7 +1,7 @@
 #ifndef CxException_HPP
 #define CxException_HPP
 
-#include "CxCore.hpp"
+#include "Celux/CxCore.hpp"
 
 #define FF_CHECK(func) do { \
     int errorCode = func; \

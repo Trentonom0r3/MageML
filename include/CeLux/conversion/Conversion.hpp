@@ -3,7 +3,7 @@
 #define CONVERSION_HPP
 
 
-#include <CPUConverters.hpp>
+#include <Celux/conversion/cpu/CPUConverters.hpp>
 
 namespace celux
 {

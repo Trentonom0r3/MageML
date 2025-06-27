@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "CxException.hpp"
+#include "error/CxException.hpp"
 #include <Conversion.hpp>
 #include <FilterFactory.hpp>
 #include <Frame.hpp>
@@ -40,7 +40,8 @@ class Decoder
     Decoder(const Decoder&) = delete;
     Decoder& operator=(const Decoder&) = delete;
 
-    void addFilter(const std::unique_ptr<FilterBase>& filter);
+    void addFilter(std::shared_ptr<FilterBase> filter);
+    void removeFilter(std::shared_ptr<FilterBase> filter);
     Decoder(Decoder&&) noexcept;
     Decoder& operator=(Decoder&&) noexcept;
     bool seekFrame(int frameIndex);

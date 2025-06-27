@@ -1077,8 +1077,7 @@ def generate_pyi_stub(output_dir, filter_class_info):
         pyi_lines.append(f"class {class_name}(FilterBase):")
         pyi_lines.append('    """')
         pyi_lines.append(f'    {description}')
-        pyi_lines.append(f'# For more info on Filters and their respective arguments,
-                         please visit https://ffmpeg.org/ffmpeg-filters.html')
+        pyi_lines.append(f'# For more info on Filters and their respective arguments, please visit https://ffmpeg.org/ffmpeg-filters.html')
         pyi_lines.append('    """')
         if not methods:
             pyi_lines.append("    pass")
@@ -1159,7 +1158,7 @@ def generate_pyi_stub(output_dir, filter_class_info):
 
 def main():
     # Input JSON file location
-    input_json_path = r'C:\Users\tjerf\source\repos\CeLux\ffmpeg_filters.json'
+    input_json_path = r'D:\dev\Projects\Repos\CeLux\ffmpeg_filters.json'
 
     # Check if JSON file exists
     if not os.path.exists(input_json_path):
@@ -1171,10 +1170,10 @@ def main():
         filters = json.load(f)
 
     # Output directories
-    hpp_output_dir = os.path.abspath(r'C:\Users\tjerf\source\repos\CeLux\include\CeLux\filters')
-    cpp_output_dir = os.path.abspath(r'C:\Users\tjerf\source\repos\CeLux\src\CeLux\filters')
-    dist_output_dir = os.path.abspath(r'C:\Users\tjerf\source\repos\CeLux\celux')
-    dist_output_cuda = os.path.abspath(r'C:\Users\tjerf\source\repos\CeLux\celux_cuda')
+    hpp_output_dir = os.path.abspath(r'D:\dev\Projects\Repos\CeLux\include\CeLux\filters')
+    cpp_output_dir = os.path.abspath(r'D:\dev\Projects\Repos\CeLux\src\CeLux\filters')
+    dist_output_dir = os.path.abspath(r'D:\dev\Projects\Repos\CeLux\celux')
+    dist_output_cuda = os.path.abspath(r'D:\dev\Projects\Repos\CeLux\celux_cuda')
 
     # Clean output directories
     clean_dirs(hpp_output_dir, cpp_output_dir)

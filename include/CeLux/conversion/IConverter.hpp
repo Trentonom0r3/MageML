@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "Frame.hpp"
+#include "Celux/Frame.hpp"
 
 namespace celux
 {
