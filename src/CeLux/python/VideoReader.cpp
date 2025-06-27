@@ -34,9 +34,11 @@ VideoReader::VideoReader(const std::string& filePath, int numThreads,
             celux::Factory::createDecoder(torchDevice, filePath, numThreads, filters_);
         CELUX_INFO("Decoder created successfully");
 
+        audio = std::make_shared<Audio>(decoder); // Create audio object
+
         torch::Dtype torchDataType;
 
-        torchDataType = findTypeFromBitDepth();
+        torchDataType = torch::kUInt8;
 
         // Retrieve video properties
         properties = decoder->getVideoProperties();
@@ -73,6 +75,38 @@ VideoReader::VideoReader(const std::string& filePath, int numThreads,
     }
 }
 
+std::shared_ptr<VideoReader::Audio> VideoReader::getAudio()
+{
+    return audio;
+}
+
+// -------------------------
+// Audio Class Implementation
+// -------------------------
+
+VideoReader::Audio::Audio(std::shared_ptr<celux::Decoder> decoder)
+    : decoder(std::move(decoder))
+{
+    if (!this->decoder)
+    {
+        throw std::runtime_error("Audio: Invalid decoder instance provided.");
+    }
+}
+
+torch::Tensor VideoReader::Audio::getAudioTensor()
+{
+    return decoder->getAudioTensor();
+}
+
+bool VideoReader::Audio::extractToFile(const std::string& outputFilePath)
+{
+    return decoder->extractAudioToFile(outputFilePath);
+}
+
+celux::Decoder::VideoProperties VideoReader::Audio::getProperties() const
+{
+    return decoder->getVideoProperties();
+}
 
 VideoReader::~VideoReader()
 {
@@ -486,10 +520,10 @@ torch::Tensor VideoReader::next()
     // -- Now check if we exceeded the time range AFTER decoding.
     if (start_time >= 0.0 && end_time > 0.0)
     {
-        // If the current frame's timestamp is >= end_time, skip/stop.
-        if (current_timestamp > end_time)
+        // If the current frame's timestamp is >= end_time, skip/stop. end time + 1 frame
+        if (current_timestamp > end_time + 1/properties.fps)
         {
-            CELUX_DEBUG("Frame timestamp {} > end_time {}, skipping frame.",
+            CELUX_DEBUG("Frame timestamp {} >= end_time {}, skipping frame.",
                         current_timestamp, end_time);
             throw py::stop_iteration();
         }

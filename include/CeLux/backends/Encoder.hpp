@@ -2,10 +2,10 @@
 #ifndef ENCODER_HPP
 #define ENCODER_HPP
 
-#include "Celux/error/CxException.hpp"
-#include <Celux/conversion/Conversion.hpp>
-#include <Celux/filters/FilterFactory.hpp>
-#include <Celux/Frame.hpp>
+#include "error/CxException.hpp"
+#include <Conversion.hpp>
+#include <FilterFactory.hpp>
+#include <Frame.hpp>
 #include <filesystem>
 
 namespace celux

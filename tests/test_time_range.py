@@ -20,8 +20,8 @@ celux.set_log_level(celux.LogLevel.off)  # trace, debug, info, error, warn, crit
 video_path = os.path.join(os.path.dirname(__file__), "data", "default", "BigBuckBunny.mp4")
 
 # Time range you want to extract, in seconds
-start_time = 2.5
-end_time   = 5.5  # non-inclusive
+start_time = 5.8391
+end_time   = 6.256 # non-inclusive
 
 output_clip_ffmpeg_times = "tests/data/tests/clip_ffmpeg_times_2.5_5.5.mp4"
 output_clip_opencv_times = "tests/data/tests/clip_opencv_times_2.5_5.5.mp4"

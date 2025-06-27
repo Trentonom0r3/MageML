@@ -11,6 +11,7 @@ namespace celux
 class Decoder
 {
   public:
+
     struct VideoProperties
     {
         std::string codec;
@@ -52,8 +53,9 @@ class Decoder
     virtual void close();
     virtual std::vector<std::string> listSupportedDecoders() const;
     AVCodecContext* getCtx();
-    bool seekToPreciseTimestamp(double timestamp);
     int getBitDepth() const;
+    bool extractAudioToFile(const std::string& outputFilePath);
+    torch::Tensor getAudioTensor();
 
   protected:
     void initialize(const std::string& filePath);
@@ -82,5 +84,16 @@ class Decoder
     Frame frame;
     std::unique_ptr<celux::conversion::IConverter> converter;
     int numThreads;
+
+    // Audio-specific members
+    int audioStreamIndex = -1;
+    AVCodecContextPtr audioCodecCtx;
+    Frame audioFrame;
+    AVPacketPtr audioPkt;
+    SwrContextPtr swrCtx;
+
+    // Helper methods
+    bool initializeAudio();
+    void closeAudio();
 };
 } // namespace celux
