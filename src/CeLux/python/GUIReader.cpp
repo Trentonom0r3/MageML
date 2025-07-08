@@ -1,8 +1,10 @@
+#include "GUIReader.hpp"
 // Python/GUIReader.cpp
-
-#include "Python/GUIReader.hpp"
 #include <torch/torch.h> // Ensure you have included the necessary Torch headers
 #include <TensorBuilder.hpp>
+#include <algorithm>
+#include <filesystem>
+#include <cctype>
 
 #define CHECK_TENSOR(tensor)                                                  \
 	if (!tensor.defined() || tensor.numel() == 0)                              \
@@ -10,10 +12,9 @@
 		throw std::runtime_error("Invalid tensor: undefined or empty");        \
 	}
 
-GUIReader::GUIReader(const std::string& filePath, int numThreads,
-                         std::vector<std::shared_ptr<FilterBase>> filters, std::string tensorShape)
+GUIReader::GUIReader(const std::string& filePath, int numThreads, std::string tensorShape)
     : decoder(nullptr), currentIndex(0), start_frame(0), end_frame(-1),
-      start_time(-1.0), end_time(-1.0), filters_(filters)
+      start_time(-1.0), end_time(-1.0)
 {
     //set ffmpeg log level
     CELUX_INFO("GUIReader constructor called with filePath: {}", filePath);
@@ -29,11 +30,10 @@ GUIReader::GUIReader(const std::string& filePath, int numThreads,
         torch::Device torchDevice = torch::Device(torch::kCPU);
         CELUX_INFO("Creating GUIReader instance");
        
-        decoder =
-            celux::Factory::createDecoder(torchDevice, filePath, numThreads, filters_);
+        decoder = celux::Factory::createDecoder(torchDevice, filePath, numThreads, {});
         CELUX_INFO("Decoder created successfully");
 
-        audio = std::make_shared<Audio>(decoder); // Create audio object
+        
 
         torch::Dtype torchDataType;
 
@@ -42,15 +42,7 @@ GUIReader::GUIReader(const std::string& filePath, int numThreads,
         // Retrieve video properties
         properties = decoder->getVideoProperties();
         
-        for (auto& filter : filters_)
-        { // Iterate through filters_
-            // Use dynamic_cast to check if the filter is of type Scale
-            if (Scale* scaleFilter = dynamic_cast<Scale*>(filter.get()))
-            {
-                properties.width = std::stoi(scaleFilter->getWidth());
-                properties.height = std::stoi(scaleFilter->getHeight());
-            }
-        }
+      
     
         CELUX_INFO("Video properties retrieved: width={}, height={}, fps={}, "
                    "duration={}, totalFrames={}, pixelFormat={}, hasAudio={}",
@@ -72,39 +64,6 @@ GUIReader::GUIReader(const std::string& filePath, int numThreads,
         CELUX_ERROR("Exception in GUIReader constructor: {}", ex.what());
         throw; // Re-throw exception after logging
     }
-}
-
-std::shared_ptr<GUIReader::Audio> GUIReader::getAudio()
-{
-    return audio;
-}
-
-// -------------------------
-// Audio Class Implementation
-// -------------------------
-
-GUIReader::Audio::Audio(std::shared_ptr<celux::Decoder> decoder)
-    : decoder(std::move(decoder))
-{
-    if (!this->decoder)
-    {
-        throw std::runtime_error("Audio: Invalid decoder instance provided.");
-    }
-}
-
-torch::Tensor GUIReader::Audio::getAudioTensor()
-{
-    return decoder->getAudioTensor();
-}
-
-bool GUIReader::Audio::extractToFile(const std::string& outputFilePath)
-{
-    return decoder->extractAudioToFile(outputFilePath);
-}
-
-celux::Decoder::VideoProperties GUIReader::Audio::getProperties() const
-{
-    return decoder->getVideoProperties();
 }
 
 GUIReader::~GUIReader()
@@ -142,29 +101,6 @@ void GUIReader::setRange(std::variant<int, double> start,
 
         throw std::invalid_argument("Unsupported type for start and end.");
     }
-}
-
-void GUIReader::addFilter(std::shared_ptr<FilterBase> filter)
-{
-    CELUX_INFO("Adding filter: {}", filter->getFilterDescription());
-    if (!filter)
-    {
-        CELUX_ERROR("Cannot add a null filter");
-        throw std::invalid_argument("Filter cannot be null.");
-    }
-    // Check if the filter is already in the list
-    for (const auto& existingFilter : filters_)
-    {
-        if (existingFilter->getFilterDescription() == filter->getFilterDescription())
-        {
-            CELUX_WARN("Filter {} is already added, skipping.", filter->getFilterDescription());
-            return; // Filter already exists, skip adding
-        }
-    }
-    // Add the new filter
-    filters_.push_back(filter);
-    decoder->addFilter(filter);
-
 }
 
 void GUIReader::setRangeByFrames(int startFrame, int endFrame)
@@ -232,7 +168,19 @@ void GUIReader::setRangeByTimestamps(double startTime, double endTime)
     CELUX_INFO("Timestamp range set: start_time={}, end_time={}", start_time, end_time);
 }
 
+//todo, refactor to frame packet with pts
 torch::Tensor GUIReader::readFrame()
+{
+    auto framePacket = readFramePacket();
+    if (!framePacket.tensor.defined() || framePacket.tensor.numel() == 0)
+    {
+        CELUX_WARN("No more frames available or decoding failed");
+        return torch::Tensor(); // Return an empty tensor
+    }
+
+}
+
+FramePacket GUIReader::readFramePacket()
 {
     CELUX_TRACE("readFrame() called");
 
@@ -241,14 +189,14 @@ torch::Tensor GUIReader::readFrame()
     if (!success)
     {
         CELUX_WARN("Decoding failed or no more frames available");
-        return torch::Tensor(); // Return an empty tensor if decoding failed
+        return FramePacket(torch::Tensor(), -1);
     }
 
     // Update current timestamp
     current_timestamp = frame_timestamp;
 
     CELUX_TRACE("Frame decoded successfully at timestamp: {}", current_timestamp);
-    return tensor;
+    return FramePacket(tensor, current_timestamp);
 }
 
 void GUIReader::close()
@@ -443,7 +391,7 @@ GUIReader& GUIReader::iter()
     return *this;
 }
 
-torch::Tensor GUIReader::next()
+FramePacket GUIReader::next()
 {
     CELUX_TRACE("next() called: Retrieving next frame");
 
@@ -490,7 +438,10 @@ torch::Tensor GUIReader::next()
     currentIndex++;
     CELUX_TRACE("Returning frame index={}, timestamp={}", currentIndex - 1,
                 current_timestamp);
-    return frame;
+    FramePacket packet;
+    packet.tensor = frame;
+    packet.timestamp = current_timestamp;
+    return packet;
 }
 
 

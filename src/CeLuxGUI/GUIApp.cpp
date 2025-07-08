@@ -1,17 +1,16 @@
 ﻿#include "GUIApp.hpp"
 #include "CeluxGUI/core/GraphManager.hpp"
-#include "CeluxGUI/nodes/RenderPreviewNode.hpp"
 #include "CeluxGUI/nodes/TensorNodes.hpp"
-
 #include <GLFW/glfw3.h>
+#include <imgui-node-editor/imgui_node_editor.h>
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
-#include <imgui_stdlib.h> // for ImGui::InputText(std::string*)
+
+namespace ed = ax::NodeEditor;
 
 void GUIApp::run()
 {
-    // 1) GLFW + ImGui init (unchanged)…
     if (!glfwInit())
         return;
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -29,87 +28,131 @@ void GUIApp::run()
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags &= ~ImGuiConfigFlags_DockingEnable;
+
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
     ImGui::StyleColorsDark();
 
-    // 2) Our dynamic graph
-    GraphManager graph;
-    static char filterBuf[128] = "";
+    static ImVec2 s_PopupPos = ImVec2(0, 0);
 
-    // 3) Main loop
+
+    io.Fonts->Clear();
+    if (auto f = io.Fonts->AddFontFromFileTTF("NotoSans_Condensed-Black.ttf", 18.0f))
+        io.FontDefault = f;
+
+    GraphManager graph;
+
+    // ─── Install custom link & flow style ───────────────────────────────────────
+    ed::SetCurrentEditor(graph.getEditorContext());
+    {
+        auto& style = ed::GetStyle();
+
+        style.LinkStrength = 100.0f;  // stiffness of the curve
+
+        // Flow animation
+        style.Colors[ed::StyleColor_Flow] = ImColor(255, 128, 64, 255);
+        style.Colors[ed::StyleColor_FlowMarker] = ImColor(255, 128, 64, 255);
+        style.FlowMarkerDistance = 20.0f; // spacing between dots
+        style.FlowSpeed = 120.0f;         // speed of the dots
+        style.FlowDuration = 1.0f;        // fade‐out time
+
+        // Snap the link tangent to the pin direction
+        style.SnapLinkToPinDir = 1.0f; // 1 = enforce, 0 = free curves
+
+        // You can adjust any other style.* field here…
+    }
+    ed::SetCurrentEditor(nullptr);
+    char filterBuf[128] = "";
+
     while (!glfwWindowShouldClose(window))
     {
-        // a) New frame
         glfwPollEvents();
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // b) Node Browser (search & categorized add in a list)
-        ImGui::Begin("Node Browser");
-        ImGui::InputTextWithHint("##node_filter", "Type to filter nodes...", filterBuf,
-                                 sizeof(filterBuf));
-        ImGui::Separator();
+        // ------ FULLSCREEN, BORDERLESS WINDOW ------
+        ImGui::SetNextWindowPos(ImVec2(0, 0));
+        ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
 
-        // Standard nodes (excluding "Filter")
-        for (auto& typeName : NodeFactory::instance().availableTypes())
+        // No title, no resize, no move, no scroll, no saved settings, no bring to front
+        ImGuiWindowFlags flags =
+            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+            ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings |
+            ImGuiWindowFlags_NoBringToFrontOnFocus;
+
+        ImGui::SetNextWindowPos(ImVec2(0, 0));
+        ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
+        ImGui::Begin("Content", nullptr, flags);
         {
-            if (typeName == "Filter")
-                continue;
-            if (!*filterBuf || typeName.find(filterBuf) != std::string::npos)
-            {
-                if (ImGui::Selectable(typeName.c_str()))
-                {
-                    graph.addNode(NodeFactory::instance().create(typeName));
-                }
+            ImVec2 contentRegion = ImGui::GetContentRegionAvail();
+            ed::SetCurrentEditor(graph.getEditorContext());
+            // ... inside your main window, inside the node editor Begin/End block:
+            ed::Begin("Node editor", contentRegion);
+
+            // Your graph drawing here
+            graph.drawUI();
+            graph.evaluate();
+            ed::Suspend();
+               // 2. Open the popup ONLY when right click on the node editor background
+            if (ed::ShowBackgroundContextMenu())
+            { // stash click pos and open popup
+                s_PopupPos = ImGui::GetMousePosOnOpeningCurrentPopup();
+                ImGui::OpenPopup("NodeCreation");
+
             }
+            ed::Resume();
+
+            ed::Suspend();
+            // 1. Always call BeginPopup, every frame (does nothing if not open)
+            if (ImGui::BeginPopup("NodeCreation"))
+            {
+
+                ImGui::TextUnformatted("Create Node:");
+                ImGui::Separator();
+                for (auto& type : NodeFactory::instance().availableTypes())
+                {
+                    if (ImGui::MenuItem(type.c_str()))
+                    {
+                        ImVec2 clickPos = s_PopupPos;
+                        auto node =
+                            NodeFactory::instance().create(type, graph.nextNodeId());
+                        graph.addNodeAt(node, clickPos);
+                    }
+                }
+                ImGui::EndPopup();
+            }
+            ed::Resume();
+
+
+            // create a button to start pipelineexecution
+            if (ImGui::Button("Start Pipeline Execution"))
+            {
+                graph.runPipelineAsync();
+            }
+   
+
+            ed::End();
+
+            ed::SetCurrentEditor(nullptr);
         }
-
-
         ImGui::End();
 
-        // c) Right-click quick-add at mouse location
-        if (ImGui::IsMouseClicked(ImGuiMouseButton_Right) && !ImGui::IsAnyItemHovered())
-            ImGui::OpenPopup("AddNode");
 
-        if (ImGui::BeginPopup("AddNode"))
-        {
-            ImVec2 spawnPos = ImGui::GetIO().MousePos;
-
-            // Other nodes
-            for (auto& t : NodeFactory::instance().availableTypes())
-            {
-                if (t == "Filter")
-                    continue;
-                if (ImGui::MenuItem(t.c_str()))
-                {
-                    auto node = NodeFactory::instance().create(t);
-                    graph.addNodeAt(node, spawnPos);
-                }
-            }
-
-            ImGui::EndPopup();
-        }
-
-        // d) Draw & interact with the graph
-        graph.drawUI();
-
-        // e) Evaluate all nodes
-        graph.evaluate();
-
-        // f) Render & swap
+        // --- Render everything ---
         ImGui::Render();
-        int fbW, fbH;
-        glfwGetFramebufferSize(window, &fbW, &fbH);
-        glViewport(0, 0, fbW, fbH);
+        int w, h;
+        glfwGetFramebufferSize(window, &w, &h);
+        glViewport(0, 0, w, h);
         glClearColor(0.1f, 0.12f, 0.15f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         glfwSwapBuffers(window);
     }
 
-    // 4) Cleanup
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();

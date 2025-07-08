@@ -4,6 +4,38 @@
 #include "Celux/backends/Decoder.hpp" // Ensure this includes the Filter class
 #include "Celux/Factory.hpp"
 
+
+static void PrintTensorDebugInfo(const torch::Tensor& tensor,
+                                 std::ostream& os = std::cout)
+{
+    if (tensor.defined())
+    {
+        os << "Tensor Info:\n";
+        os << "  Shape: " << tensor.sizes() << "\n";
+        os << "  Dtype: " << tensor.dtype() << "\n";
+        os << " Min: " << tensor.min().item<float>() << "\n";
+        os << " Max: " << tensor.max().item<float>() << "\n";
+    }
+    else
+    {
+        os << "Tensor is undefined.\n";
+    }
+
+}
+struct FramePacket
+{
+    torch::Tensor tensor;
+    double timestamp;
+
+    FramePacket() = default;
+
+    FramePacket(torch::Tensor _frame, double _timestamp)
+        : tensor(_frame), timestamp(_timestamp)
+    {
+    }
+
+};
+
 class GUIReader
 {
   public:
@@ -16,8 +48,8 @@ class GUIReader
      */
     GUIReader(const std::string& filePath,
                 int numThreads = static_cast<int>(std::thread::hardware_concurrency() /
-                                                  2),
-                std::vector<std::shared_ptr<FilterBase>> filter = {}, std::string tensorShape = "CHW");
+                                                  2)
+               , std::string tensorShape = "HWC");
 
     /**
      * @brief Destructor for GUIReader.
@@ -35,6 +67,7 @@ class GUIReader
      */
     torch::Tensor readFrame();
 
+    FramePacket readFramePacket();
     /**
      * @brief Seek to a specific timestamp in the video.
      *
@@ -68,7 +101,7 @@ class GUIReader
      *
      * @return torch::Tensor Next frame as torch::Tensor.
      */
-    torch::Tensor next();
+    FramePacket next();
 
     /**
      * @brief Get the total number of frames.
@@ -123,60 +156,6 @@ class GUIReader
      */
     void setRangeByTimestamps(double startTime, double endTime);
 
-    inline std::vector<std::shared_ptr<FilterBase>> getFilters() const {
-        return filters_;
-    }
-
-    /// Remove a filter by index
-    inline void removeFilter(size_t idx)
-    {
-        //get filter by idx
-        auto filter = filters_.at(idx);
-        decoder->removeFilter(filter);
-    }
-    
-    /**
-     * @brief Retrieve the audio object for interaction.
-     *
-     * @return Audio instance.
-     */
-    class Audio
-    {
-      public:
-        explicit Audio(std::shared_ptr<celux::Decoder> decoder);
-
-        /**
-         * @brief Get audio data as a tensor.
-         *
-         * @return torch::Tensor The extracted audio data.
-         */
-        torch::Tensor getAudioTensor();
-
-        /**
-         * @brief Extracts the audio to a file.
-         *
-         * @param outputFilePath The path where the audio file should be saved.
-         * @return True if successful, false otherwise.
-         */
-        bool extractToFile(const std::string& outputFilePath);
-
-        /**
-         * @brief Get audio properties such as sample rate, channels, and codec.
-         *
-         * @return A struct containing audio properties.
-         */
-        celux::Decoder::VideoProperties getProperties() const;
-
-      private:
-        std::shared_ptr<celux::Decoder> decoder;
-    };
-
-    /**
-     * @brief Get the audio interface.
-     *
-     * @return A reference to the Audio class.
-     */
-    std::shared_ptr<Audio> getAudio();
 
     bool seekToFrame(int frame_number);
     torch::ScalarType findTypeFromBitDepth();
@@ -203,11 +182,9 @@ class GUIReader
     // Iterator state
     int currentIndex;
     double current_timestamp; // Add this line
-    // List of filters to be added before initialization
-    std::vector<std::shared_ptr<FilterBase>> filters_;
+
     torch::Tensor bufferedFrame; // The "first valid" frame, if we found it early
     bool hasBufferedFrame = false;
-    std::shared_ptr<Audio> audio;
 };
 
 #endif // GUIReader_HPP

@@ -246,8 +246,10 @@ add_executable(CeLuxGUI
     src/CeLuxGUI/GUIApp.cpp
     src/CeLuxGUI/core/GraphManager.cpp
     src/CeLuxGUI/core/Node.hpp #includes nodefactory
-    src/CeLuxGUI/nodes/VideoReaderNode.cpp #RenderPreviewNode
+    src/CeLuxGUI/nodes/VideoPipeline.cpp
     src/CeLuxGUI/nodes/RenderPreviewNode.cpp
+    src/CeluxGUI/core/builders.cpp
+    src/CeluxGUI/core/stbimpl.cpp
 )
 
 target_include_directories(CeLuxGUI PRIVATE
@@ -278,6 +280,8 @@ find_package(imgui CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(unofficial-imgui-node-editor CONFIG REQUIRED)
+find_package(Stb REQUIRED)
 
 file(GLOB_RECURSE CELUX_ALL_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/*.cpp
@@ -301,9 +305,11 @@ target_link_libraries(CeLuxGUI PRIVATE
     imgui::imgui
     glfw
     OpenGL::GL
-    ${OpenCV_LIBS}  # <-- Add this
+ unofficial::imgui-node-editor::imgui-node-editor
     spdlog::spdlog_header_only
     fmt::fmt-header_only
+     glad::glad
+${Stb_INCLUDE_DIR}
 )
 
 # ————————————————————————————————————————————————————————————————

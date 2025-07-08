@@ -2,8 +2,35 @@
 #include <iostream>
 #include <torch/torch.h>
 
-RenderPreviewNode::RenderPreviewNode()
-    : textureID(0), isAllocated(false), texWidth(0), texHeight(0)
+/// Returns vector of (frame_idx, tensor), sorted by frame_idx ascending.
+static std::vector<std::pair<int, torch::Tensor>>
+getAllFrameXTensors(const std::map<std::string, torch::Tensor>& tensorInputs)
+{
+    std::vector<std::pair<int, torch::Tensor>> out;
+    for (const auto& kv : tensorInputs)
+    {
+        const std::string& key = kv.first;
+        if (key.rfind("frame_", 0) == 0)
+        {
+            try
+            {
+                int idx = std::stoi(key.substr(6));
+                out.emplace_back(idx, kv.second);
+            }
+            catch (...)
+            {
+                // skip keys with non-integer suffix
+            }
+        }
+    }
+    std::sort(out.begin(), out.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+    return out;
+}
+
+
+RenderPreviewNode::RenderPreviewNode(ed::NodeId id)
+    : Node(id), textureID(0), isAllocated(false), texWidth(0), texHeight(0)
 {
     glGenTextures(1, &textureID);
     glBindTexture(GL_TEXTURE_2D, textureID);
@@ -25,31 +52,59 @@ RenderPreviewNode::~RenderPreviewNode()
 
 void RenderPreviewNode::compute()
 {
-
-    // Fetch the frame tensor
-    auto it = tensorInputs.find("frame");
-    if (it == tensorInputs.end())
+    // --- Gather all frame_* tensors ---
+    std::vector<std::pair<int, torch::Tensor>> frames;
+    for (const auto& kv : tensorInputs)
     {
-       // std::cerr << "[RenderPreviewNode] ERROR: no 'frame' key in tensorInputs\n";
+        const std::string& key = kv.first;
+        std::cout << "[RenderPreviewNode] key: " << key << "\n";
+        if (key.rfind("frame_", 0) == 0) // key starts with "frame_"
+        {
+            try
+            {
+                // Extract index from key, e.g., "frame_0" -> 0
+                int idx = std::stoi(key.substr(6));
+                frames.emplace_back(idx, kv.second);
+            }
+            catch (...)
+            {
+                // skip if not a valid number
+            }
+        }
+    }
+    // If none found, fallback to "frame"
+    if (frames.empty())
+    {
+        std::cout
+            << "[RenderPreviewNode] No frame_x tensors found, checking for 'frame'\n";
+        auto it = tensorInputs.find("frame");
+        if (it != tensorInputs.end())
+        {
+            frames.emplace_back(0, it->second);
+        }
+    }
+
+    if (frames.empty())
+    {
+        std::cerr
+            << "[RenderPreviewNode] ERROR: no frame_x or 'frame' in tensorInputs\n";
         return;
     }
-    torch::Tensor frame = it->second;
 
-    if (!frame.defined() || frame.numel() == 0)
+    // Sort by index and get the latest (highest index) frame
+    std::sort(frames.begin(), frames.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+    const auto& [frameIdx, frameTensor] = frames.back();
+
+    if (!frameTensor.defined() || frameTensor.numel() == 0)
     {
-       // std::cerr << "[RenderPreviewNode] frame tensor is empty or undefined\n";
+       
         return;
     }
 
-    // Debug: shape & dtype
-    std::cerr << "[RenderPreviewNode] raw tensor: dtype=" << frame.scalar_type()
-              << " shape=[";
-    for (auto d : frame.sizes())
-        std::cerr << d << ",";
-    std::cerr << "]\n";
-
-    // Ensure uint8
-    torch::Tensor img = frame;
+    // --- Frame preparation (your original logic) ---
+    torch::Tensor img = frameTensor;
+    PrintTensorDebugInfo(img);
     if (img.scalar_type() == torch::kFloat32 || img.scalar_type() == torch::kFloat64)
     {
         img = img.mul(255.0f).clamp(0, 255).to(torch::kUInt8);
@@ -60,13 +115,13 @@ void RenderPreviewNode::compute()
     }
 
     // Fix orientation by flipping height axis on CHW
-    img = img.flip({0,2,1});
+    img = img.flip({0, 2, 1}); // double-check if this is your intended axes
 
     // Convert from CHW -> HWC, remove last idx
-    img = img.clone().contiguous().cpu();
+    img = img.contiguous().cpu();
 
-    int height = static_cast<int>(img.size(1));
-    int width = static_cast<int>(img.size(2));
+    int height = static_cast<int>(img.size(0));
+    int width = static_cast<int>(img.size(1));
 
     // Upload to OpenGL texture
     glBindTexture(GL_TEXTURE_2D, textureID);
@@ -95,17 +150,15 @@ void RenderPreviewNode::compute()
     }
 }
 
-void RenderPreviewNode::drawUI(const std::string& uid)
+bool RenderPreviewNode::drawExtraUI() 
 {
-    // We'll embed the texture right in this node's window.
-    ImGui::TextUnformatted(
-        typeName().c_str()); // window title is already drawn by GraphManager
-    ImGui::Separator();
 
     // Fetch our texture info
     GLuint tex = getTextureID();
-    int w = getWidth(), h = getHeight();
-    if (tex && w > 0 && h > 0)
+    int w = getWidth();
+    int h = getHeight();
+
+    if (tex != 0 && w > 0 && h > 0)
     {
         // compute a size that preserves aspect ratio
         ImVec2 avail = ImGui::GetContentRegionAvail();
@@ -115,13 +168,18 @@ void RenderPreviewNode::drawUI(const std::string& uid)
         else
             avail.y = avail.x / aspect;
 
-        // draw it
-        ImGui::Image((ImTextureID)(intptr_t)tex, avail, ImVec2(1, 1), ImVec2(0, 0));
+        // draw the preview image
+        ImGui::Image((ImTextureID)(intptr_t)tex, avail, ImVec2(0, 1), // UV0
+                     ImVec2(1, 0) // UV1 (flip Y if needed)
+        );
     }
     else
     {
         ImGui::TextDisabled("No texture");
     }
+
+    // We don’t modify any parameters here, so return false
+    return false;
 }
 
 std::vector<PortInfo> RenderPreviewNode::inputs() const
@@ -153,13 +211,15 @@ void RenderPreviewNode::setParam(const std::string&, std::any)
 {
 }
 
+
 // Auto-register
 namespace
 {
 const bool registered = []()
 {
     NodeFactory::instance().registerType(
-        "RenderPreview", []() { return std::make_shared<RenderPreviewNode>(); });
+        "RenderPreview",
+        [](ed::NodeId id) { return std::make_shared<RenderPreviewNode>(id); });
     return true;
 }();
 } // namespace

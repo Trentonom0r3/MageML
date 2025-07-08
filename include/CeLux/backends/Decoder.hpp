@@ -2,7 +2,7 @@
 
 #include "error/CxException.hpp"
 #include <Conversion.hpp>
-#include <FilterFactory.hpp>
+#include <filters/FilterFactory.hpp>
 #include <Frame.hpp>
 
 namespace celux

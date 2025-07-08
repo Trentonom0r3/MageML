@@ -6,7 +6,7 @@
 class RenderPreviewNode : public Node
 {
   public:
-    RenderPreviewNode();
+    RenderPreviewNode(ed::NodeId id);
     ~RenderPreviewNode();
 
     void compute() override;
@@ -19,7 +19,7 @@ class RenderPreviewNode : public Node
     void setParam(const std::string&, std::any) override;
 
     std::string typeName() const override;
-    void drawUI(const std::string& uid) override;
+    bool drawExtraUI() override;
     GLuint getTextureID() const;
     int getWidth() const
     {

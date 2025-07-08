@@ -42,7 +42,7 @@ class UnaryTensorNode : public Node
     bool dirty_ = true; // set when UI params change
 
   public:
-    explicit UnaryTensorNode(std::string kind) : kind_(std::move(kind))
+    explicit UnaryTensorNode(std::string kind, ed::NodeId id) : Node(id), kind_(std::move(kind))
     {
     }
 
@@ -52,7 +52,7 @@ class UnaryTensorNode : public Node
     }
     std::vector<PortInfo> outputs() const override
     {
-        return {{"out", PortInfo::Tensor}};
+        return {{"frame", PortInfo::Tensor}};
     }
 
     std::vector<ParamInfo> params() const override
@@ -67,40 +67,17 @@ class UnaryTensorNode : public Node
         return kind_;
     }
 
-    void drawUI(const std::string& uid) override
-    {
-        bool uiChanged = false;
-        if (torch::cuda::is_available())
-        {
-            bool useGpu = dstDev_.is_cuda();
-            if (ImGui::Checkbox(("GPU##" + uid).c_str(), &useGpu))
-            {
-                dstDev_ = useGpu ? torch::Device(torch::kCUDA, 0) : torch::kCPU;
-                uiChanged = true;
-            }
-            ImGui::SameLine();
-        }
-        uiChanged |= drawExtraUI(uid);
-        if (uiChanged)
-        {
-            dirty_ = true;
-            tensorOutputs.clear(); // invalidate cached ptr → downstream refresh
-        }
-    }
-protected :
-    virtual bool drawExtraUI(const std::string&)
-{
-        return false;
-    }
-
 torch::Tensor inTensor()
 {
     auto it = tensorInputs.find("in");
     return it == tensorInputs.end() ? torch::Tensor() : maybe_to(it->second, dstDev_);
 }
+
 void publish(torch::Tensor t)
 {
-    tensorOutputs["out"] = maybe_to(std::move(t), torch::kCPU);
+    tensorOutputs["frame"] = maybe_to(std::move(t), torch::kCPU);
+    std::cout << '[' << kind_ << "] compute] published tensor with shape: "
+              << tensorOutputs["frame"].sizes() << '\n';
     dirty_ = false;
 }
 }
@@ -126,18 +103,37 @@ class PermuteNode final : public UnaryTensorNode
     std::array<int64_t, 4> order_{0, 1, 2, 3};
 
   public:
-    PermuteNode() : UnaryTensorNode("Permute")
+    PermuteNode(ed::NodeId id) : UnaryTensorNode("Permute", id)
     {
+        // Set default param values
+        setParam("O0", static_cast<int>(order_[0]));
+        setParam("O1", static_cast<int>(order_[1]));
+        setParam("O2", static_cast<int>(order_[2]));
+        setParam("O3", static_cast<int>(order_[3]));
     }
 
-    bool drawExtraUI(const std::string& uid) override
+    /// Expose each dimension as an editable int param
+    std::vector<ParamInfo> params() const override
     {
-        bool changed = false;
-        changed |= ImGui::InputInt4(("Order##" + uid).c_str(),
-                                    reinterpret_cast<int*>(order_.data()));
-        ImGui::SameLine();
-        ImGui::TextUnformatted("(first N values used)");
-        return changed;
+        return {
+            {"O0", ParamInfo::Int, static_cast<int>(order_[0])},
+            {"O1", ParamInfo::Int, static_cast<int>(order_[1])},
+            {"O2", ParamInfo::Int, static_cast<int>(order_[2])},
+            {"O3", ParamInfo::Int, static_cast<int>(order_[3])},
+        };
+    }
+
+    /// Update internal state when a param is edited
+    void setParam(const std::string& name, std::any value) override
+    {
+        if (name == "O0")
+            order_[0] = std::any_cast<int>(value);
+        if (name == "O1")
+            order_[1] = std::any_cast<int>(value);
+        if (name == "O2")
+            order_[2] = std::any_cast<int>(value);
+        if (name == "O3")
+            order_[3] = std::any_cast<int>(value);
     }
 
     void compute() override
@@ -150,6 +146,7 @@ class PermuteNode final : public UnaryTensorNode
                     publish({});
                     return;
                 }
+
                 const int64_t rank = x.dim();
                 if (rank < 2 || rank > 4)
                 {
@@ -158,7 +155,7 @@ class PermuteNode final : public UnaryTensorNode
                     return;
                 }
 
-                // Build unique permutation
+                // Build unique permutation vector
                 std::vector<int64_t> used;
                 used.reserve(rank);
                 for (size_t i = 0; i < static_cast<size_t>(rank); ++i)
@@ -177,18 +174,110 @@ class PermuteNode final : public UnaryTensorNode
                     publish({});
                     return;
                 }
+
                 publish(x.permute(used).contiguous());
             },
             "PermuteNode");
     }
+
+bool drawExtraUI() override
+    {
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        auto x = inTensor();
+
+        if (!x.defined())
+        {
+            ImGui::Text("No input tensor defined");
+            return false;
+        }
+
+        int rank = int(x.dim());
+        auto sizes = x.sizes();
+        static const char* names[] = {"N", "C", "H", "W"};
+
+        // Explicitly sized ImGui table
+        ImVec2 tableSize = ImVec2(160, (rank + 1) * 30.0f);
+
+        if (ImGui::BeginTable("permuteTable", 2,
+                              ImGuiTableFlags_BordersInnerV |
+                                  ImGuiTableFlags_SizingFixedFit,
+                              tableSize))
+        {
+            ImGui::TableSetupColumn("Dims", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+            ImGui::TableSetupColumn("Shape", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+            ImGui::TableHeadersRow();
+
+            for (int i = 0; i < rank; ++i)
+            {
+                ImGui::TableNextRow(ImGuiTableRowFlags_None, 26.0f);
+
+                ImGui::TableSetColumnIndex(0);
+                ImGui::PushID(i);
+
+                // Make each button a drag source AND drop target
+                ImGui::Button(names[order_[i]], ImVec2(40, 20));
+
+                // Drag source
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
+                {
+                    ImGui::SetDragDropPayload("DND_PERMUTE_DIM", &i, sizeof(int));
+                    ImGui::Text("Move %s", names[order_[i]]);
+                    ImGui::EndDragDropSource();
+                }
+
+                // Drop target
+                if (ImGui::BeginDragDropTarget())
+                {
+                    if (const ImGuiPayload* payload =
+                            ImGui::AcceptDragDropPayload("DND_PERMUTE_DIM"))
+                    {
+                        int src = *(const int*)payload->Data;
+                        std::swap(order_[src], order_[i]);
+                        // No setParam here!
+                        // Just update order_ directly.
+                        std::cout << "[PermuteNode] Swapped: ";
+                        for (auto v : order_)
+                            std::cout << v << " ";
+                        std::cout << std::endl;
+                    }
+
+
+                    ImGui::EndDragDropTarget();
+                }
+
+                ImGui::PopID();
+
+                // Show dimension size
+                ImGui::TableSetColumnIndex(1);
+                ImGui::Text("%lld", (long long)sizes[order_[i]]);
+            }
+
+            ImGui::EndTable();
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        return true;
+    }
+
+
 };
 
 //==============================================================================
 // TypeCastNode
 //==============================================================================
-class TypeCastNode final : public UnaryTensorNode {
+class TypeCastNode final : public UnaryTensorNode
+{
     int idx_ = 0;
-    static constexpr struct {
+    bool combo_open_ = false; // Track if our fake combo is expanded
+
+    static constexpr struct
+    {
         const char* lab;
         torch::ScalarType tp;
     } opts[] = {{"F32", torch::kFloat32},
@@ -197,53 +286,90 @@ class TypeCastNode final : public UnaryTensorNode {
                 {"I32", torch::kInt32}};
 
   public:
-    TypeCastNode() : UnaryTensorNode("TypeCast") {}
+    TypeCastNode(ed::NodeId id) : UnaryTensorNode("TypeCast", id)
+    {
+    }
 
-    bool drawExtraUI(const std::string& uid) override {
+    bool drawExtraUI() override
+    {
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        ImGui::TextDisabled("[TypeCastNode UI]");
+
+        auto ptr = reinterpret_cast<intptr_t>(getId().AsPointer());
+        std::string comboId = "TypeFakeCombo##" + std::to_string(ptr);
         const char* labels[] = {"F32", "F16", "U8", "I32"};
-        return ImGui::Combo(("Type##" + uid).c_str(), &idx_, labels, IM_ARRAYSIZE(labels));
-    }
 
-    void compute() override {
-        SAFE_COMPUTE(
+        // Render a button that "opens" our fake dropdown
+        ImVec2 btnSize = ImVec2(110, 0);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(64, 90, 180, 200));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(90, 120, 240, 220));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(44, 60, 120, 240));
+
+        bool changed = false;
+        // Draw the fake combo "header" (current selection)
+        if (ImGui::Button((std::string(labels[idx_]) + "  \xE2\x96\xBC").c_str(),
+                          btnSize))
+        {
+            combo_open_ = !combo_open_; // Toggle open/close
+        }
+        ImGui::PopStyleColor(3);
+        ImGui::PopStyleVar();
+
+        // Draw the "dropdown" if open
+        if (combo_open_)
+        {
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(48, 60, 130, 220));
+            ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32(120, 130, 200, 150));
+            ImGui::BeginChild((comboId + "Menu").c_str(), ImVec2(btnSize.x, 100), true,
+                              ImGuiChildFlags_FrameStyle |
+                                  ImGuiWindowFlags_NoScrollbar);
+            for (int i = 0; i < IM_ARRAYSIZE(labels); ++i)
             {
-                auto x = inTensor();
-                publish(x.defined() ? x.to(opts[idx_].tp, true, false) : torch::Tensor());
-            },
-            "TypeCastNode");
-    }
-};
+                // Highlight selection
+                if (ImGui::Selectable(labels[i], idx_ == i, ImGuiSelectableFlags_None,
+                                      ImVec2(btnSize.x - 8, 0)))
+                {
+                    idx_ = i;
+                    combo_open_ = false;
+                    changed = true;
+                }
+            }
+            ImGui::EndChild();
+            ImGui::PopStyleColor(2);
+            ImGui::PopStyleVar();
+        }
 
-//==============================================================================
-// NormalizeNode
-//==============================================================================
-class NormalizeNode final : public UnaryTensorNode
-{
-    float scale_ = 1.f / 255.f, shift_ = 0.f;
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
 
-  public:
-    NormalizeNode() : UnaryTensorNode("Normalize")
-    {
+        // Optional: Close dropdown if click outside (primitive hit test)
+        if (combo_open_ && !ImGui::IsItemHovered(ImGuiHoveredFlags_AnyWindow) &&
+            ImGui::IsMouseClicked(0))
+        {
+            combo_open_ = false;
+        }
+
+        return changed;
     }
-    bool drawExtraUI(const std::string& uid) override
-    {
-        bool ch1 = ImGui::DragFloat(("Scale##" + uid).c_str(), &scale_, 0.0001f);
-        ImGui::SameLine();
-        bool ch2 = ImGui::DragFloat(("Shift##" + uid).c_str(), &shift_, 0.0001f);
-        return ch1 || ch2;
-    }
-    bool changed = false;
+
     void compute() override
     {
         SAFE_COMPUTE(
             {
                 auto x = inTensor();
-                publish(x.defined() ? x.to(torch::kFloat32).mul(scale_).add_(shift_)
+                publish(x.defined() ? x.to(opts[idx_].tp, true, false)
                                     : torch::Tensor());
             },
-            "NormalizeNode");
+            "TypeCastNode");
     }
 };
+
 
 //==============================================================================
 // ClampNode
@@ -253,19 +379,23 @@ class ClampNode final : public UnaryTensorNode
     float lo_ = 0.f, hi_ = 1.f;
 
   public:
-    ClampNode() : UnaryTensorNode("Clamp")
+    ClampNode(ed::NodeId id) : UnaryTensorNode("Clamp", id)
     {
     }
-    bool drawExtraUI(const std::string& uid) override
+    bool drawExtraUI() override
     {
-        return ImGui::DragFloatRange2(("Range##" + uid).c_str(), &lo_, &hi_, 0.001f,
-                                      -10.f, 10.f);
+        auto ptr = reinterpret_cast<intptr_t>(getId().AsPointer());
+        return ImGui::DragFloatRange2(("Range##" + std::to_string(ptr)).c_str(), &lo_,
+                                      &hi_, 0.001f, -10.f, 10.f);
     }
+
     bool changed = false;
     void compute() override
     {
         SAFE_COMPUTE(
             {
+                std::cout << "[ClampNode] compute] lo: " << lo_ << ", hi: " << hi_
+                          << '\n';
                 auto x = inTensor();
                 publish(x.defined() ? x.clamp(lo_, hi_) : torch::Tensor());
             },
@@ -273,49 +403,97 @@ class ClampNode final : public UnaryTensorNode
     }
 };
 
-//==============================================================================
-// ScaleShiftNode
-//==============================================================================
-class ScaleShiftNode final : public UnaryTensorNode
+class RingBufferNode : public Node
 {
-    float s_ = 1.f, b_ = 0.f;
-
   public:
-    ScaleShiftNode() : UnaryTensorNode("ScaleShift")
+    RingBufferNode(ed::NodeId id = 0) : Node(id), maxSize_(0)
     {
+        buffer_.resize(0);
     }
-    bool drawExtraUI(const std::string& uid) override
+
+    std::string typeName() const override
     {
-        bool ch1 = ImGui::DragFloat(("Scale##" + uid).c_str(), &s_, 0.001f);
-        ImGui::SameLine();
-        bool ch2 = ImGui::DragFloat(("Shift##" + uid).c_str(), &b_, 0.001f);
-        return ch1 || ch2;
+        return "RingBuffer";
     }
-    bool changed = false;
+
     void compute() override
     {
-        SAFE_COMPUTE(
-            {
-                auto x = inTensor();
-                publish(x.defined() ? x.mul(s_).add_(b_) : torch::Tensor());
-            },
-            "ScaleShiftNode");
+        // 1. Get input frame
+        if (tensorInputs.count("input") == 0 || !tensorInputs["input"].defined())
+            return;
+
+        auto newFrame = tensorInputs["input"];
+
+        // 2. Add to buffer
+        buffer_.push_back(newFrame);
+        if (buffer_.size() > maxSize_)
+            buffer_.pop_front();
+
+        // 3. Set outputs
+        // Output 0: most recent (current)
+        for (size_t i = 0; i < buffer_.size(); ++i)
+        {
+            tensorOutputs["frame_" + std::to_string(i)] = buffer_[buffer_.size() - 1 - i];
+            // out0: newest, out1: prev, out2: 2nd prev, etc
+        }
     }
+
+    std::vector<PortInfo> inputs() const override
+    {
+        return {{"input", PortInfo::Tensor}};
+    }
+    std::vector<PortInfo> outputs() const override
+    {
+        std::vector<PortInfo> outs;
+        for (size_t i = 0; i < maxSize_; ++i)
+            outs.push_back({"frame_" + std::to_string(i), PortInfo::Tensor});
+        return outs;
+    }
+    std::vector<ParamInfo> params() const override
+    {
+        return {};
+    }
+    void setParam(const std::string& name, std::any val) override
+    {
+        if (name == "size")
+        {
+            int s = std::any_cast<int>(val);
+            if (s > 1 && s <= 32)
+                maxSize_ = s;
+            while (buffer_.size() > maxSize_)
+                buffer_.pop_front();
+        }
+    }
+    bool drawExtraUI() override
+    {
+        auto ptr = reinterpret_cast<intptr_t>(getId().AsPointer());
+        // allow resizing the buffer
+        return ImGui::InputInt(("Size##" + std::to_string(ptr)).c_str(),
+                               reinterpret_cast<int*>(&maxSize_));
+    }
+
+  private:
+    std::deque<torch::Tensor> buffer_;
+    size_t maxSize_;
 };
+
 namespace
 {
 const bool registered = []()
 {
-    NodeFactory::instance().registerType("Permute", []()
-                                         { return std::make_shared<PermuteNode>(); });
-    NodeFactory::instance().registerType("TypeCast", []()
-                                         { return std::make_shared<TypeCastNode>(); });
-    NodeFactory::instance().registerType("Normalize", []()
-                                         { return std::make_shared<NormalizeNode>(); });
-    NodeFactory::instance().registerType("Clamp", []()
-                                         { return std::make_shared<ClampNode>(); });
+    NodeFactory::instance().registerType("Permute", [](ed::NodeId id)
+                                         { return std::make_shared<PermuteNode>(id); });
+    NodeFactory::instance().registerType("TypeCast", [](ed::NodeId id)
+                                         { return std::make_shared<TypeCastNode>(id); });
+
+    NodeFactory::instance().registerType("Clamp", [](ed::NodeId id)
+                                         { return std::make_shared<ClampNode>(id); });
+
     NodeFactory::instance().registerType(
-        "ScaleShift", []() { return std::make_shared<ScaleShiftNode>(); });
+        "RingBuffer", [](ed::NodeId id) { return std::make_shared<RingBufferNode>(id); });
+    NodeFactory::instance().registerType(
+        "VideoReader",
+        [](ed::NodeId id) { return std::make_shared<VideoReaderNode>(id); });
     return true;
 }();
 }
