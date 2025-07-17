@@ -92,8 +92,7 @@ class Decoder
     AVPacketPtr audioPkt;
     SwrContextPtr swrCtx;
 
-    // Helper methods
-    bool initializeAudio();
+
     void closeAudio();
 };
 } // namespace celux

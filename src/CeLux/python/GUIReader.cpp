@@ -171,7 +171,7 @@ void GUIReader::setRangeByTimestamps(double startTime, double endTime)
 //todo, refactor to frame packet with pts
 torch::Tensor GUIReader::readFrame()
 {
-    auto framePacket = readFramePacket();
+    FramePacket framePacket = readFramePacket();
     if (!framePacket.tensor.defined() || framePacket.tensor.numel() == 0)
     {
         CELUX_WARN("No more frames available or decoding failed");
@@ -236,7 +236,7 @@ bool GUIReader::seek(double timestamp)
     // Decode frames until reaching the exact timestamp
     while (current_timestamp < timestamp)
     {
-        readFrame();
+       readFrame();
     }
 
     CELUX_TRACE("Exact seek to timestamp {} successful", timestamp);

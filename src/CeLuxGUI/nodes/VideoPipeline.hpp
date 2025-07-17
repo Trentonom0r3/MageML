@@ -7,6 +7,23 @@
 #include <mutex>
 #include <string>
 
+static std::string normalizePath(const std::string& raw)
+{
+    try
+    {
+        std::string s = raw;
+        if (s.size() >= 2 && ((s.front() == '"' && s.back() == '"') ||
+                              (s.front() == '\'' && s.back() == '\'')))
+            s = s.substr(1, s.size() - 2);
+        std::error_code ec;
+        auto abs = std::filesystem::absolute(s, ec);
+        return ec ? s : abs.string();
+    }
+    catch (...)
+    {
+        return raw;
+    }
+}
 
 enum class StepResult
 {

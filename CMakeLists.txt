@@ -3,7 +3,7 @@
 # ======================================================
 # 1. User-configurable options
 # ======================================================
-option(CELUX_ENABLE_CUDA   "Build with CUDA acceleration" OFF)
+option(CELUX_ENABLE_CUDA   "Build with CUDA acceleration" ON)
 option(CELUX_BUILD_PYTHON  "Build the Python extension (requires pybind11)" OFF)
 option(CELUX_BUILD_SHARED  "Build CeLux as a shared library" OFF)
 
@@ -93,12 +93,37 @@ endif()
 # ======================================================
 # 5. Source Files
 # ======================================================
-file(GLOB_RECURSE CELUX_SOURCES CONFIGURE_DEPENDS
+# Collect all .cpp/.hpp files for CeLuxLib
+file(GLOB_RECURSE ALL_CELUX_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/*.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/conversion/*.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/backends/*.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/filters/*.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/filters/*.cpp
+    # If you want headers for IDE, add .hpp too
+    # ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/*.hpp
+)
 
+# Filter out *Bindings.cpp/hpp, *_bindings.cpp/hpp, filter_bindings_chunk_*.cpp/hpp
+set(CELUX_SOURCES "")
+foreach(f ${ALL_CELUX_SOURCES})
+    if(
+        f MATCHES ".*Bindings\\.cpp$"
+        OR f MATCHES ".*Bindings\\.hpp$"
+        OR f MATCHES ".*_bindings\\.cpp$"
+        OR f MATCHES ".*_bindings\\.hpp$"
+        OR f MATCHES ".*filter_bindings_chunk_.*\\.cpp$"
+        OR f MATCHES ".*filter_bindings_chunk_.*\\.hpp$"
+        OR f MATCHES ".*/VideoReader\\.cpp$"
+OR f MATCHES ".*/VideoReader\\.hpp$"
+
+    )
+        # skip this file
+    else()
+        list(APPEND CELUX_SOURCES "${f}")
+    endif()
+endforeach()
+
+# Add CUDA sources if needed
 if (CELUX_ENABLE_CUDA)
     file(GLOB_RECURSE CELUX_CUDA_SOURCES CONFIGURE_DEPENDS
         ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/cuda/*.cu)
@@ -241,20 +266,43 @@ message(STATUS "======================================================\n")
 # ======================================================
 # 10. CeLux GUI application
 # ======================================================
+find_package(glfw3 CONFIG REQUIRED)
+find_package(glad CONFIG REQUIRED)
+find_package(OpenGL REQUIRED)
+find_package(Stb REQUIRED)
+set(VCPKG_INSTALLED "D:/dev/C++/vcpkg/installed/x64-windows")
+
+include_directories("${VCPKG_INSTALLED}/include")
+link_directories("${VCPKG_INSTALLED}/lib")
+
+add_subdirectory(extern/imgui-node-editor/examples)
 add_executable(CeLuxGUI
+
     src/CeLuxGUI/main.cpp
-    src/CeLuxGUI/GUIApp.cpp
-    src/CeLuxGUI/core/GraphManager.cpp
-    src/CeLuxGUI/core/Node.hpp #includes nodefactory
     src/CeLuxGUI/nodes/VideoPipeline.cpp
-    src/CeLuxGUI/nodes/RenderPreviewNode.cpp
-    src/CeluxGUI/core/builders.cpp
-    src/CeluxGUI/core/stbimpl.cpp
+
+    extern/imgui-node-editor/imgui_node_editor.cpp
+    extern/imgui-node-editor/imgui_node_editor_api.cpp
+    extern/imgui-node-editor/imgui_canvas.cpp
+    extern/imgui-node-editor/crude_json.cpp
+    extern/imgui-node-editor/external/imgui/imgui_widgets.cpp
+    extern/imgui-node-editor/examples/blueprints-example/utilities/drawing.cpp
+    extern/imgui-node-editor/examples/blueprints-example/utilities/widgets.cpp
+    extern/imgui-node-editor/examples/blueprints-example/utilities/builders.cpp
 )
+
 
 target_include_directories(CeLuxGUI PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor
+                ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/external/DXSDK
+${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/external/imgui
+${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/external/ScopeGuard
+${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/external/stb_image
+${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/examples/application/include
+${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/examples/application/source
+${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/examples/blueprints-example/
     ${CMAKE_CURRENT_BINARY_DIR}/include/CeLux/error
     ${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux
     ${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/backends
@@ -276,17 +324,18 @@ foreach(hdr ${CELUX_HEADERS})
     list(APPEND FILTERED_HEADERS ${hdr})
 endforeach()
 
-find_package(imgui CONFIG REQUIRED)
-find_package(glfw3 CONFIG REQUIRED)
-find_package(glad CONFIG REQUIRED)
-find_package(OpenGL REQUIRED)
-find_package(unofficial-imgui-node-editor CONFIG REQUIRED)
-find_package(Stb REQUIRED)
+
 
 file(GLOB_RECURSE CELUX_ALL_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/*.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/conversion/*.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/backends/*.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/backends/*.cpp
+     ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui-node-editor/*cpp
+     ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui-node-editor/external/*cpp
+          ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui-node-editor/external/imgui/*cpp
+     ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui-node-editor/examples/blueprints-example/*.cpp
+)
+
 
 # Exclude *_bindings.cpp if Python is not enabled
 set(CELUX_SOURCES "")
@@ -301,14 +350,16 @@ foreach(src_file IN LISTS CELUX_ALL_SOURCES)
 endforeach()
 
 target_link_libraries(CeLuxGUI PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor
+    ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/external/imgui
     CeLuxLib
-    imgui::imgui
+    application
     glfw
     OpenGL::GL
- unofficial::imgui-node-editor::imgui-node-editor
     spdlog::spdlog_header_only
     fmt::fmt-header_only
      glad::glad
+ onnxruntime
 ${Stb_INCLUDE_DIR}
 )
 

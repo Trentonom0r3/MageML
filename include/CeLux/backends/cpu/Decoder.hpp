@@ -13,7 +13,6 @@ class Decoder : public celux::Decoder
         : celux::Decoder( numThreads, filters)
     {
         initialize(filePath);
-        initializeAudio();
     }
 
     // No need to override methods unless specific behavior is needed

@@ -3,24 +3,6 @@
 #include <filesystem>
 #include <iostream>
 
-static std::string normalizePath(const std::string& raw)
-{
-    try
-    {
-        std::string s = raw;
-        if (s.size() >= 2 && ((s.front() == '"' && s.back() == '"') ||
-                              (s.front() == '\'' && s.back() == '\'')))
-            s = s.substr(1, s.size() - 2);
-        std::error_code ec;
-        auto abs = std::filesystem::absolute(s, ec);
-        return ec ? s : abs.string();
-    }
-    catch (...)
-    {
-        return raw;
-    }
-}
-
 VideoPipeline::VideoPipeline() : filePath_("")
 {
 }
@@ -55,8 +37,8 @@ bool VideoPipeline::seek(double seconds)
     seconds = std::min(seconds, duration());
     seconds = std::max(seconds, 0.0);
 
-    {
-        std::lock_guard<std::mutex> lock(readerMutex_);
+    {    std::lock_guard<std::mutex> lock(readerMutex_);
+  //      std::lock_guard<std::mutex> lock(readerMutex_);
         if (!reader_ || !reader_->seek(seconds))
             return false;
     }
@@ -115,11 +97,20 @@ StepResult VideoPipeline::step()
 {
     // For stepping, just decode one frame forward.
     auto pkt = getNextFrame();
+
     if (pkt->tensor.defined())
+    {
+
         return StepResult::NewFrame;
+    }
     else
+    {
+        // No more frames available, return EndOfStream.
         return StepResult::EndOfStream;
+    }
 }
+ 
+
 
 double VideoPipeline::currentTime() const
 {
