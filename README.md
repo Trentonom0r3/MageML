@@ -35,7 +35,7 @@
 Powered by CeLux (fast video/tensor core), ONNX Runtime, PyTorch, and imgui-node-editor.
 
 ---
-🎥 [Watch Demo Video](assets/graphvideo.mp4)
+🎥 [Watch Demo Video](assets/graphdemo.mp4)
 
 ---
 
