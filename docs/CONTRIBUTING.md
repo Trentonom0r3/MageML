@@ -1,42 +1,40 @@
-
-
 ## 🤝 Contributing
 
-We welcome contributions! Follow these steps to contribute:
+We welcome contributions! Follow these steps to get started:
 
-1. **Fork the Repository:**
+1. **Fork the Repository**
 
-    Click the "Fork" button at the top right of the repository page.
+   Click the **"Fork"** button at the top-right of the [MageML GitHub page](https://github.com/trentonom0r3/MageML).
 
-2. **Clone Your Fork:**
+2. **Clone Your Fork Locally**
 
-    ```bash
-    git clone https://github.com/your-username/celux.git
-    cd celux
-    ```
+   ```bash
+   git clone https://github.com/trentonom0r3/MageML.git
+   cd MageML
+   git submodule update --init --recursive
+   ```
 
-3. **Create a New Branch:**
+3. **Set Up the Project**
 
-    ```bash
-    git checkout -b feature/your-feature-name
-    ```
+   - Open `CMakePresets.json` and adjust paths as needed (e.g., for dependencies or build directories).  
+   - Open the repo root folder in **Visual Studio** (or your preferred CMake-aware IDE).
 
-4. **Make Your Changes:**
+4. **Make Your Changes**
 
-    Implement your feature or bugfix.
+   - Work in a new feature branch:  
+     ```bash
+     git checkout -b feature/my-new-feature
+     ```
+   - Keep commits focused and descriptive.
+   - Comment code where necessary and follow existing conventions.
 
-5. **Commit Your Changes:**
+5. **Submit a Pull Request**
 
-    ```bash
-    git commit -am "Add your commit message here"
-    ```
+   - Push your changes to your fork:  
+     ```bash
+     git push origin feature/my-new-feature
+     ```
+   - Go to your fork on GitHub and click **"Compare & pull request"**.
+   - Include a clear description and comments explaining your changes.
 
-6. **Push to Your Fork:**
-
-    ```bash
-    git push origin feature/your-feature-name
-    ```
-
-7. **Submit a Pull Request:**
-
-    Go to the original repository and click on "Pull Requests," then "New Pull Request."
+> 📝 We appreciate detailed PRs with context and reasoning. Screenshots, test results, and code comments are always welcome!

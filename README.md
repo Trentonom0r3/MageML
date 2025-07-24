@@ -1,81 +1,161 @@
-[![Release and Benchmark Tests](https://github.com/Trentonom0r3/CeLux/actions/workflows/createRelease.yaml/badge.svg)](https://github.com/Trentonom0r3/CeLux/actions/workflows/createRelease.yaml)
 [![License](https://img.shields.io/badge/license-AGPL%203.0-blue.svg)](LICENSE)
-[![PyPI Version](https://img.shields.io/pypi/v/celux)](https://pypi.org/project/celux/)
-[![PyPI - Downloads](https://img.shields.io/pypi/dm/celux)](https://pypi.org/project/celux/)
-[![Python Versions](https://img.shields.io/pypi/pyversions/celux)](https://pypi.org/project/celux/)
 [![Discord](https://img.shields.io/discord/1041502781808328704.svg?label=Join%20Us%20on%20Discord&logo=discord&colorB=7289da)](https://discord.gg/hFSHjGyp4p)
 
+# MageML
 
-# CeLux
+### 🛠️ Version 1.0.0 BETA — Initial Public Release
 
-**CeLux** is a high-performance Python library for video processing, leveraging the power of FFmpeg. It delivers some of the fastest decode times for full HD videos globally, enabling efficient and seamless video decoding directly into PyTorch tensors.
+[Check out the latest changes](docs/CHANGELOG.md#version-100-beta--initial-public-release)
 
-The name **CeLux** is derived from the Latin words `celer` (speed) and `lux` (light), reflecting its commitment to speed and efficiency.
 
-# [Check out the latest changes](docs/CHANGELOG.md#version-061)
-  - **CeLux** now has basic audio support!
-    - Decode into tensor, or directly into file.
-    
-## 📚 Documentation
+---
+
+# 📚 Documentation
 
 - [📝 Changelog](docs/CHANGELOG.md)
 - [📦 Installation Instructions](docs/INSTALLATION.md)
-  - [🤖 PIP installation](docs/INSTALLATION.md#pip-installation)
   - [🛠️ Building from Source](docs/INSTALLATION.md#building-from-source)
-- [🚀 Getting Started](docs/GETTINGSTARTED.md)
-- [📊 Benchmarks](docs/BENCHMARKS.md)
 - [🤝 Contributing Guide](docs/CONTRIBUTING.md)
 - [❓ FAQ](docs/FAQ.md)
 
-## 🚀 Features
+---
 
-- **⚡ Ultra-Fast Video Decoding:** Achieve lightning-fast decode times for full HD videos using hardware acceleration.
-- **🔗 Direct Decoding to Tensors:** Decode video frames directly into PyTorch tensors for immediate processing.
-- **🔄 Easy Integration:** Seamlessly integrates with existing Python workflows, making it easy to incorporate into your projects.
+# 🚀 Features
 
-## ⚡ Quick Start
+**MageML** is a blazing-fast, node-based graph editor for video and ML pipelines.
 
-```sh
-pip install celux  # cpu only version
-```
+- **Visual, drag-and-drop node editor** for building AI/video flows in seconds
+- **ONNX model support** – run any compatible ML model, no code required
+- **Chain arbitrary nodes** (decode, filter, ML, encode, and more)
+- **High-performance, pure C++/CUDA** backend for real-time throughput
+- **Export** for full automation workflows
 
-```py
-from celux import VideoReader, Scale
-#import celux as cx
-filters = [Scale(width = 1920, height = 1080)]
-reader = VideoReader("/path/to/video.ext",
-                    #num_threads: int = os.cpu_count(),
-                    filters = filters,
-                    #tensor_shape: str = 'HWC'
-                    )
-for frame in reader:
-# do something
-```
+## For More Information on available nodes, please see [Nodes](docs/NODES.md)
 
-<!-- BENCHMARK_SUMMARY_START -->
+Powered by CeLux (fast video/tensor core), ONNX Runtime, PyTorch, and imgui-node-editor.
 
-## 📊 Benchmark Summary
+---
+🎥 [Watch Demo Video](assets/graphvideo.mp4)
 
-| Library  | Device       | Frames per Second (FPS) |
-|----------|--------------|-------------------------|
-| Celux | CPU      | 1520.75                 |
-| PyAV | CPU      | 350.58                |
-| OpenCV | CPU      | 454.44                 |
+---
 
+---
 
-For more details, see [Benchmarks](docs/BENCHMARKS.md).
+# ⚡ Quick Start Guide
 
-<!-- BENCHMARK_SUMMARY_END -->
+MageML is a real-time, zero-copy machine learning graph editor for video and tensor pipelines. Here’s how to get up and running fast:
 
-## 📄 License
+---
 
-This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. See the [LICENSE](LICENSE) file for details.
+### 🧩 1. Download the Latest Release  
+Grab the latest release from the [Releases page](https://github.com/MageML/releases).  
 
-## 🙏 Acknowledgments
+---
 
-- **[FFmpeg](https://ffmpeg.org/):** The backbone of video processing in CeLux.
-- **[PyTorch](https://pytorch.org/):** For tensor operations and CUDA support.
-- **[Vcpkg](https://github.com/microsoft/vcpkg):** Simplifies cross-platform dependency management.
-- **[@NevermindNilas](https://github.com/NevermindNilas):** For assistance with testing, API suggestions, and more.
+### 🛠️ 2. Extract Files
+Extract the Zip File to your preferred location.
 
+---
 
+### 🚀 3. Launch MageML  
+Start the app from a shortcut or directly via `MageMLGUI.exe` within the root folder you extracted into.
+
+---
+
+### 🧠 4. (Optional) Add Models  
+Place any `.onnx` models into the `models/` folder. Some starter models may already be included.
+
+---
+
+### 🖱️ 5. Start a Project  
+Use the UI to load a template graph or create a new one. Drag and connect nodes to begin building your pipeline.
+
+---
+
+# 🧭 UI Overview & Tips
+
+- **Top Left Panel:**  
+  Controls for `Live` and `Basic` modes:
+  
+  - **Live Mode:** All nodes recalculate automatically on changes. *Video pipeline will not push unless running.*
+  - **Basic Mode:** Only Video Reader and Preview nodes compute. Ideal for layout/design without processing overhead.
+
+  You can toggle modes **without running the graph** to safely test behaviors.
+
+- **Run / Stop:**  
+  Starts/stops the video processing pipeline. You can also modify node parameters during runtime for real-time feedback.
+
+- ⚠️ **Encoding Tip:**  
+  Avoid scrubbing during encoding. Let the graph play to completion.  
+  Be sure to click `Finalize` in the encoder node to ensure the file is written!
+
+---
+
+## 🧩 Node System
+
+- **Video Reader Node:**  
+  Enables timeline control, `Live`/`Basic` toggle, and playback.
+
+- **Active Node List:**  
+  Located below the main toolbar. Double-click to rename nodes.
+
+- **Node Inspector Panel:**  
+  Appears below the node list. Displays the selected node’s parameters and controls.
+
+- **Right Click Actions:**
+  - On **nodes**, see input/output tensor values (great for debugging)
+  - On **graph background**, spawn new nodes by category
+  - On **pins/links**, access connection options
+
+---
+
+## 💡 Performance Tips
+
+- For max speed: **Remove Preview Nodes** when not needed.
+- MageML is **zero-copy**: Tensors only clone during **Preview** or **Encoding**. All other ops run in-place.
+
+---
+
+## ⌨️ Hotkeys
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+O` | Open graph |
+| `Ctrl+S` | Save graph |
+| `Ctrl+Shift+S` | Save as |
+| `Ctrl+C/V/X` | Copy / Paste / Cut node |
+| `Ctrl+A` | Select all |
+| `Ctrl+Shift+A` | Deselect all |
+
+Graphs are saved as `.json`, and reusable templates can be added to the `templates/` folder for quick access via the File menu.
+
+---
+
+## 🎨 Style Menu
+
+Use the Style menu to customize the look of:
+
+- Node shapes, colors, and font size
+- Link styles (flow map, wire thickness)
+- Grid layout, zoom, snapping
+
+---
+
+# 📄 License
+
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.  
+See the [LICENSE](LICENSE) file for details.
+
+---
+
+# 🙏 Acknowledgments
+
+- **[CeLux]((https://github.com/trentonom0r3/celux))** – Fast video/tensor core
+- **[PyTorch](https://pytorch.org/)** – For tensor ops and CUDA support
+- **[ONNX Runtime](https://onnxruntime.ai/)** – Universal ML inference
+- **[imgui-node-editor](https://github.com/thedmd/imgui-node-editor)** – Graph UI
+- **[vcpkg](https://github.com/microsoft/vcpkg)** – C++ dependency mgmt
+
+---
+
+*For questions, ideas, or just to show off your graph, join our [Discord](https://discord.gg/hFSHjGyp4p)!*

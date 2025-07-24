@@ -11,11 +11,9 @@
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "D:/dev/c++/vcpkg/scripts/buildsystems/vcpkg.cmake",
         "VCPKG_TARGET_TRIPLET": "x64-windows",
-        "VCPKG_ROOT": "D:/dev/c++/vcpkg",
-        "Torch_DIR": "D:/dev/C++/Libraries/libtorch-cuda/libtorch/share/cmake/Torch",
-        "Python3_ROOT_DIR": "C:/Program Files/Python313",
-        "Python3_EXECUTABLE": "C:/Program Files/Python313/python.exe",
-        "PYTORCH_PYTHON_LIB_DIR": "C:/Program Files/Python313/Lib/site-packages/torch/lib"
+        "VCPKG_ROOT": "D:/dev/C++/vcpkg",
+        "Torch_DIR": "D:/dev/C++/Libraries/libtorch-cuda/libtorch_d/libtorch/share/cmake/Torch"
+    
       },
       "condition": {
         "type": "equals",
@@ -24,32 +22,9 @@
       }
     },
     {
-      "name": "x64-debug-cpu",
-      "displayName": "x64 Debug CPU-only",
-      "description": "Target Windows (64-bit) CPU-only build. (Debug)",
-      "inherits": "windows-base",
-      "architecture": {
-        "value": "x64",
-        "strategy": "external"
-      },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "ENABLE_CUDA": "OFF"
-      }
-    },
-    {
-      "name": "x64-release-cpu",
-      "displayName": "x64 Release CPU-only",
-      "description": "Target Windows (64-bit) CPU-only build. (Release)",
-      "inherits": "x64-debug-cpu",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      }
-    },
-    {
-      "name": "x64-debug-cuda",
-      "displayName": "x64 Debug CUDA",
-      "description": "Target Windows (64-bit) with CUDA support. (Debug)",
+      "name": "x64-debug",
+      "displayName": "x64 Debug ",
+      "description": "Target Windows (64-bit) (Debug)",
       "inherits": "windows-base",
       "architecture": {
         "value": "x64",
@@ -59,6 +34,17 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_CUDA": "ON"
       }
+    },
+    {
+      "name": "x64-release",
+      "displayName": "x64 Release ",
+      "description": "Target Windows (64-bit) (Release)",
+      "inherits": "x64-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "Torch_DIR": "D:/dev/C++/Libraries/libtorch-cuda/libtorch/share/cmake/Torch"
+      }
     }
+  
   ]
 }

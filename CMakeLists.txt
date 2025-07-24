@@ -3,21 +3,20 @@
 # ======================================================
 # 1. User-configurable options
 # ======================================================
-option(CELUX_ENABLE_CUDA   "Build with CUDA acceleration" ON)
-option(CELUX_BUILD_PYTHON  "Build the Python extension (requires pybind11)" OFF)
-option(CELUX_BUILD_SHARED  "Build CeLux as a shared library" OFF)
+option(MageML_ENABLE_CUDA   "Build with CUDA acceleration" ON)
+option(MageML_BUILD_SHARED  "Build MageML as a shared library" OFF)
 
-if (NOT CELUX_ENABLE_CUDA)
+if (NOT MageML_ENABLE_CUDA)
     set(CMAKE_DISABLE_FIND_PACKAGE_CUDAToolkit ON)
 endif()
 
 # ======================================================
 # 2. Project declaration
 # ======================================================
-if (CELUX_ENABLE_CUDA)
-    project(CeLux VERSION 1.0 LANGUAGES CXX CUDA)
+if (MageML_ENABLE_CUDA)
+    project(MageML VERSION 1.0 LANGUAGES CXX CUDA)
 else()
-    project(CeLux VERSION 1.0 LANGUAGES CXX)
+    project(MageML VERSION 1.0 LANGUAGES CXX)
 endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -33,7 +32,7 @@ if (CCACHE_PROGRAM)
     message(STATUS "Enabling ccache")
     set(CMAKE_C_COMPILER_LAUNCHER   ${CCACHE_PROGRAM})
     set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
-    if (CELUX_ENABLE_CUDA)
+    if (MageML_ENABLE_CUDA)
         set(CMAKE_CUDA_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
     endif()
 endif()
@@ -42,11 +41,7 @@ endif()
 # 4. Dependencies
 # ======================================================
 find_package(spdlog CONFIG REQUIRED)
-find_package(fmt CONFIG REQUIRED)
-
-if (NOT TARGET fmt::fmt-header_only AND TARGET fmt::fmt)
-    add_library(fmt::fmt-header_only ALIAS fmt::fmt)
-endif()
+find_package(fmt     CONFIG REQUIRED)   # fmt::fmt
 
 # ---- Torch ----
 if (NOT DEFINED Torch_DIR)
@@ -54,6 +49,7 @@ if (NOT DEFINED Torch_DIR)
 endif()
 find_package(Torch REQUIRED)
 
+# Make sure we have a Torch::Torch target
 if (NOT TARGET Torch::Torch)
     if (TARGET torch)
         add_library(Torch::Torch ALIAS torch)
@@ -64,223 +60,122 @@ if (NOT TARGET Torch::Torch)
     endif()
 endif()
 
-if (NOT CELUX_ENABLE_CUDA)
+if (NOT MageML_ENABLE_CUDA)
     if (TARGET torch_cuda OR TORCH_CUDA_FOUND)
         message(FATAL_ERROR "CPU-only build requested but GPU-enabled libtorch detected. Use a CPU-only LibTorch build.")
     endif()
 endif()
 
 # ---- FFmpeg ----
-find_package(FFMPEG REQUIRED COMPONENTS avcodec avformat avutil swscale swresample)
+find_package(FFMPEG REQUIRED COMPONENTS avcodec avformat avutil swscale swresample libx264)
+find_package(glfw3 CONFIG REQUIRED)
+find_package(glad  CONFIG REQUIRED)
+find_package(OpenGL REQUIRED)
+find_package(Stb   REQUIRED)
 
-# ---- Python + pybind11 ----
-if (CELUX_BUILD_PYTHON)
-    if (NOT DEFINED Python3_EXECUTABLE OR NOT DEFINED Python3_ROOT_DIR)
-        message(FATAL_ERROR "Missing Python config. Set PYTHON_EXECUTABLE and PYTHON_ROOT in environment or presets.")
-    endif()
+set(VCPKG_INSTALLED "${VCPKG_ROOT}/installed/x64-windows")
+include_directories("${VCPKG_INSTALLED}/include")
+link_directories("${VCPKG_INSTALLED}/lib")
 
-    set(Python3_FIND_REGISTRY NEVER)
-    set(Python3_FIND_STRATEGY LOCATION)
-    find_package(Python3 3.12 REQUIRED COMPONENTS Interpreter Development)
-
-    if (Python3_VERSION VERSION_GREATER_EQUAL 3.14)
-        message(FATAL_ERROR "Python ≥3.14 is not supported. Use Python 3.12 or 3.13.")
-    endif()
-
-    find_package(pybind11 CONFIG REQUIRED)
-endif()
-
+add_subdirectory(extern/imgui-node-editor/examples)
 # ======================================================
 # 5. Source Files
 # ======================================================
-# Collect all .cpp/.hpp files for CeLuxLib
-file(GLOB_RECURSE ALL_CELUX_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/*.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/conversion/*.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/backends/*.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/filters/*.cpp
-    # If you want headers for IDE, add .hpp too
-    # ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/*.hpp
+file(GLOB_RECURSE ALL_MageML_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MageML/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MageML/conversion/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MageML/backends/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MageML/filters/*.cpp
 )
 
-# Filter out *Bindings.cpp/hpp, *_bindings.cpp/hpp, filter_bindings_chunk_*.cpp/hpp
-set(CELUX_SOURCES "")
-foreach(f ${ALL_CELUX_SOURCES})
-    if(
-        f MATCHES ".*Bindings\\.cpp$"
-        OR f MATCHES ".*Bindings\\.hpp$"
-        OR f MATCHES ".*_bindings\\.cpp$"
-        OR f MATCHES ".*_bindings\\.hpp$"
-        OR f MATCHES ".*filter_bindings_chunk_.*\\.cpp$"
-        OR f MATCHES ".*filter_bindings_chunk_.*\\.hpp$"
-        OR f MATCHES ".*/VideoReader\\.cpp$"
-OR f MATCHES ".*/VideoReader\\.hpp$"
-
-    )
-        # skip this file
-    else()
-        list(APPEND CELUX_SOURCES "${f}")
-    endif()
-endforeach()
-
-# Add CUDA sources if needed
-if (CELUX_ENABLE_CUDA)
-    file(GLOB_RECURSE CELUX_CUDA_SOURCES CONFIGURE_DEPENDS
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/cuda/*.cu)
-    list(APPEND CELUX_SOURCES ${CELUX_CUDA_SOURCES})
+if (MageML_ENABLE_CUDA)
+    file(GLOB_RECURSE MageML_CUDA_SOURCES CONFIGURE_DEPENDS
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/MageML/cuda/*.cu)
+    list(APPEND ALL_MageML_SOURCES ${MageML_CUDA_SOURCES})
 endif()
 
 # ======================================================
-# 6. CeLux core library
+# 6. MageML core library
 # ======================================================
-set(CELUX_LIB_TYPE STATIC)
-if (CELUX_BUILD_SHARED)
-    set(CELUX_LIB_TYPE SHARED)
+set(MageML_LIB_TYPE STATIC)
+if (MageML_BUILD_SHARED)
+    set(MageML_LIB_TYPE SHARED)
 endif()
 
-add_library(CeLuxLib ${CELUX_LIB_TYPE} ${CELUX_SOURCES})
+add_library(MageMLLib ${MageML_LIB_TYPE} ${ALL_MageML_SOURCES})
 
-target_include_directories(CeLuxLib
+target_include_directories(MageMLLib
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/MageML>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/MageML/backends>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/MageML/filters>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/MageML/conversion>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/MageML/core>
         $<INSTALL_INTERFACE:include>
         ${FFMPEG_INCLUDE_DIRS}
-        ${Python3_INCLUDE_DIRS}
-    PRIVATE
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/error>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/conversion>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/conversion/cpu>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/backends>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/backends/cpu>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/filters>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/filters/generated>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/python>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/python>
 )
 
-set(FFMPEG_LIBS ${FFMPEG_LIBRARIES})
-
-target_link_libraries(CeLuxLib PUBLIC
-    ${FFMPEG_LIBS}
-    Torch::Torch
-    spdlog::spdlog_header_only
-    fmt::fmt-header_only)
+target_link_libraries(MageMLLib
+    PUBLIC
+        ${FFMPEG_LIBRARIES}
+        Torch::Torch
+        spdlog::spdlog_header_only
+        fmt::fmt
+)
 
 if (WIN32)
-    target_link_libraries(CeLuxLib PUBLIC ws2_32 bcrypt)
+    target_link_libraries(MageMLLib PUBLIC ws2_32 bcrypt)
 endif()
 
-if (CELUX_ENABLE_CUDA)
-    target_compile_definitions(CeLuxLib PUBLIC CELUX_WITH_CUDA)
-    set_property(TARGET CeLuxLib PROPERTY CUDA_STANDARD 17)
-endif()
-
-# ======================================================
-# 7. Python bindings
-# ======================================================
-if (CELUX_BUILD_PYTHON)
-    pybind11_add_module(celux src/CeLux/Python/Bindings.cpp)
-
-    target_include_directories(celux PRIVATE
-        ${CMAKE_CURRENT_BINARY_DIR}/include/CeLux/error
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/python
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/backends
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/backends/cpu
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/conversion
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/conversion/cpu
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/filters
-    )
-
-    target_link_libraries(celux PRIVATE CeLuxLib Python3::Python)
-
-    if (NOT DEFINED PYTORCH_PYTHON_LIB_DIR)
-        message(FATAL_ERROR "PYTORCH_PYTHON_LIB_DIR not set. Set via environment or preset.")
-    endif()
-
-    target_link_directories(celux PRIVATE ${PYTORCH_PYTHON_LIB_DIR})
-    target_link_libraries(celux PRIVATE
-        ${PYTORCH_PYTHON_LIB_DIR}/torch.lib
-        ${PYTORCH_PYTHON_LIB_DIR}/c10.lib
-        ${PYTORCH_PYTHON_LIB_DIR}/torch_cpu.lib
-        ${PYTORCH_PYTHON_LIB_DIR}/torch_python.lib
-        ${PYTORCH_PYTHON_LIB_DIR}/asmjit.lib
-        ${PYTORCH_PYTHON_LIB_DIR}/fbgemm.lib
-        ${PYTORCH_PYTHON_LIB_DIR}/fmt.lib
-        ${PYTORCH_PYTHON_LIB_DIR}/cpuinfo.lib
-        ${PYTORCH_PYTHON_LIB_DIR}/pthreadpool.lib
-        ${PYTORCH_PYTHON_LIB_DIR}/XNNPACK.lib
-    )
-
-    set_target_properties(celux PROPERTIES
-        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/python
-        OUTPUT_NAME "celux"
-    )
+if (MageML_ENABLE_CUDA)
+    target_compile_definitions(MageMLLib PUBLIC MageML_WITH_CUDA)
+    set_property(TARGET MageMLLib PROPERTY CUDA_STANDARD 17)
 endif()
 
 # ======================================================
-# 8. Install rules
+# 8. Install rules (core lib)
 # ======================================================
 include(GNUInstallDirs)
 
-install(TARGETS CeLuxLib EXPORT CeLuxTargets
+install(TARGETS MageMLLib EXPORT MageMLTargets
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-install(EXPORT CeLuxTargets NAMESPACE CeLux:: FILE CeLuxTargets.cmake DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CeLux)
+install(EXPORT MageMLTargets NAMESPACE MageML:: FILE MageMLTargets.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/MageML)
 
 include(CMakePackageConfigHelpers)
 write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/CeLuxConfigVersion.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/MageMLConfigVersion.cmake
     VERSION ${PROJECT_VERSION}
     COMPATIBILITY SameMajorVersion)
 
-if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/cmake/CeLuxConfig.cmake.in")
+if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/cmake/MageMLConfig.cmake.in")
     configure_package_config_file(
-        ${CMAKE_CURRENT_LIST_DIR}/cmake/CeLuxConfig.cmake.in
-        ${CMAKE_CURRENT_BINARY_DIR}/CeLuxConfig.cmake
-        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CeLux)
+        ${CMAKE_CURRENT_LIST_DIR}/cmake/MageMLConfig.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/MageMLConfig.cmake
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/MageML
+    )
 else()
-    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/CeLuxConfig.cmake
-        "# Auto-generated minimal config\ninclude(\"${CMAKE_CURRENT_LIST_DIR}/CeLuxTargets.cmake\")\n")
+    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/MageMLConfig.cmake
+        "# Auto-generated minimal config\ninclude(\"${CMAKE_CURRENT_LIST_DIR}/MageMLTargets.cmake\")\n"
+    )
 endif()
 
 install(FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/CeLuxConfig.cmake
-    ${CMAKE_CURRENT_BINARY_DIR}/CeLuxConfigVersion.cmake
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CeLux)
+    ${CMAKE_CURRENT_BINARY_DIR}/MageMLConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/MageMLConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/MageML)
 
-# ======================================================
-# 9. Build summary
-# ======================================================
-message(STATUS "\n================= CeLux build summary =================")
-message(STATUS "CUDA support         : ${CELUX_ENABLE_CUDA}")
-message(STATUS "Python bindings      : ${CELUX_BUILD_PYTHON}")
-message(STATUS "Torch_DIR            : ${Torch_DIR}")
-message(STATUS "Install prefix       : ${CMAKE_INSTALL_PREFIX}")
-message(STATUS "======================================================\n")
-# ======================================================
-# 10. CeLux GUI application
-# ======================================================
-find_package(glfw3 CONFIG REQUIRED)
-find_package(glad CONFIG REQUIRED)
-find_package(OpenGL REQUIRED)
-find_package(Stb REQUIRED)
-set(VCPKG_INSTALLED "D:/dev/C++/vcpkg/installed/x64-windows")
 
-include_directories("${VCPKG_INSTALLED}/include")
-link_directories("${VCPKG_INSTALLED}/lib")
-
-add_subdirectory(extern/imgui-node-editor/examples)
-add_executable(CeLuxGUI
-
-    src/CeLuxGUI/main.cpp
-    src/CeLuxGUI/nodes/VideoPipeline.cpp
-
+add_executable(MageMLGUI
+    src/MageMLGUI/main.cpp
+    src/MageMLGUI/nodes/VideoPipeline.cpp
+    src/MageMLGUI/nodes/EncoderPipeline.cpp
     extern/imgui-node-editor/imgui_node_editor.cpp
     extern/imgui-node-editor/imgui_node_editor_api.cpp
     extern/imgui-node-editor/imgui_canvas.cpp
@@ -291,84 +186,43 @@ add_executable(CeLuxGUI
     extern/imgui-node-editor/examples/blueprints-example/utilities/builders.cpp
 )
 
-
-target_include_directories(CeLuxGUI PRIVATE
+target_include_directories(MageMLGUI PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor
-                ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/external/DXSDK
-${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/external/imgui
-${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/external/ScopeGuard
-${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/external/stb_image
-${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/examples/application/include
-${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/examples/application/source
-${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/examples/blueprints-example/
-    ${CMAKE_CURRENT_BINARY_DIR}/include/CeLux/error
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/backends
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/backends/cpu
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/conversion
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/conversion/cpu
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLuxGUI/core
-)
-
-# If you ever glob headers for install or IDE support
-file(GLOB_RECURSE CELUX_HEADERS CONFIGURE_DEPENDS
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/CeLux/**/*.hpp)
-
-set(FILTERED_HEADERS "")
-foreach(hdr ${CELUX_HEADERS})
-    if (NOT CELUX_BUILD_PYTHON AND hdr MATCHES "_bindings\\.hpp$")
-        continue()
-    endif()
-    list(APPEND FILTERED_HEADERS ${hdr})
-endforeach()
-
-
-
-file(GLOB_RECURSE CELUX_ALL_SOURCES CONFIGURE_DEPENDS
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/*.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/conversion/*.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/CeLux/backends/*.cpp
-     ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui-node-editor/*cpp
-     ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui-node-editor/external/*cpp
-          ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui-node-editor/external/imgui/*cpp
-     ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui-node-editor/examples/blueprints-example/*.cpp
-)
-
-
-# Exclude *_bindings.cpp if Python is not enabled
-set(CELUX_SOURCES "")
-foreach(src_file IN LISTS CELUX_ALL_SOURCES)
-    if (CELUX_BUILD_PYTHON)
-        list(APPEND CELUX_SOURCES ${src_file})
-    else()
-        if (NOT src_file MATCHES "_bindings\\.cpp$")
-            list(APPEND CELUX_SOURCES ${src_file})
-        endif()
-    endif()
-endforeach()
-
-target_link_libraries(CeLuxGUI PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor
+    ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/external/DXSDK
     ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/external/imgui
-    CeLuxLib
-    application
+    ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/external/ScopeGuard
+    ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/external/stb_image
+    ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/examples/application/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/examples/application/source
+    ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui-node-editor/examples/blueprints-example
+    ${CMAKE_CURRENT_BINARY_DIR}/include/MageML/error
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/MageML
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/MageML/filters
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/MageML/backends
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/MageML/backends/cpu
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/MageML/conversion
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/MageML/conversion/cpu
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MageMLGUI/core
+)
+
+target_link_libraries(MageMLGUI PRIVATE
+    MageMLLib
+    application                 # imgui node editor's helper target
     glfw
     OpenGL::GL
+    glad::glad
     spdlog::spdlog_header_only
-    fmt::fmt-header_only
-     glad::glad
- onnxruntime
-${Stb_INCLUDE_DIR}
+    fmt::fmt
+    onnxruntime                 
 )
 
-# ————————————————————————————————————————————————————————————————
-# 11. CeLuxGUI Install & Bundle (simplified)
-# ————————————————————————————————————————————————————————————————
+# ======================================================
+# 11. MageMLGUI Install & Bundle (simplified)
 
-# 11.1. CeLuxGUI itself
-install(TARGETS CeLuxGUI
+# 11.1. MageMLGUI itself
+install(TARGETS MageMLGUI
     RUNTIME DESTINATION bin
 )
 
@@ -389,12 +243,11 @@ install(FILES
   DESTINATION bin
 )
 
-# 11.4. And turn that whole bin/ tree into a ZIP via CPack
 include(InstallRequiredSystemLibraries)
-set(CPACK_PACKAGE_NAME         "CeLuxGUI")
-set(CPACK_PACKAGE_VENDOR       "Trentonom0r3")
-set(CPACK_PACKAGE_DESCRIPTION  "CeLux standalone GUI bundle")
-set(CPACK_PACKAGE_VERSION      "${PROJECT_VERSION}")
-set(CPACK_GENERATOR            "ZIP")
-set(CPACK_PACKAGE_FILE_NAME    "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}")
+set(CPACK_PACKAGE_NAME        "MageMLGUI")
+set(CPACK_PACKAGE_VENDOR      "Trentonom0r3")
+set(CPACK_PACKAGE_DESCRIPTION "MageML standalone GUI bundle")
+set(CPACK_PACKAGE_VERSION     "${PROJECT_VERSION}")
+set(CPACK_GENERATOR           "ZIP")
+set(CPACK_PACKAGE_FILE_NAME   "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}")
 include(CPack)
